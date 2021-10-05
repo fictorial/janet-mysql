@@ -41,5 +41,6 @@
 
 (declare-native
     :name "_mysql"
+    :cflags ~("-std=c99" ,;(pkg-config "mysqlclient --cflags"))
     :lflags (pkg-config "mysqlclient --libs")
     :source ["mysql.c"])

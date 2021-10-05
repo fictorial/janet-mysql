@@ -1,9 +1,10 @@
 #include <alloca.h>
 #include <inttypes.h>
-#include </home/matthew/janet/janet.h>
 #include <stdio.h>
-#include <mysql/mysql.h>
 #include <string.h>
+
+#include <janet.h>
+#include <mysql.h>
 
 static Janet safe_ckeywordv(const char *s) {
     return s ? janet_ckeywordv(s) : janet_wrap_nil();
@@ -189,7 +190,7 @@ static const JanetAbstractType statement_type = {
 
 typedef struct {
     MYSQL *conn;
-    bool in_transaction;
+    my_bool in_transaction;
 } jmy_context_t;
 
 static void __ensure_ctx_ok(jmy_context_t *ctx) {
@@ -281,7 +282,7 @@ static Janet context_connect(int32_t argc, Janet *argv) {
     }
 
     ctx->conn = conn;
-    ctx->in_transaction = false;
+    ctx->in_transaction = 0;
 
     return janet_wrap_abstract(ctx);
 }
@@ -334,9 +335,9 @@ static Janet context_prepare(int32_t argc, Janet *argv) {
 
 typedef struct {
     MYSQL_BIND *binds;
-    bool *nulls;
+    my_bool *nulls;
     unsigned long *lengths;
-    bool *errors;
+    my_bool *errors;
     int len;
 } jmy_query_bind_t;
 
@@ -357,14 +358,14 @@ static jmy_query_bind_t allocate_binds(int num_fields, MYSQL_FIELD *fields) {
     MYSQL_BIND *binds = (MYSQL_BIND *)janet_smalloc(sizeof(MYSQL_BIND) * num_fields);
     memset(binds, 0, sizeof(MYSQL_BIND) * num_fields);
 
-    bool *nulls = (bool *)janet_smalloc(sizeof(bool) * num_fields);
-    memset(nulls, 0, sizeof(bool) * num_fields);
+    my_bool *nulls = (my_bool *)janet_smalloc(sizeof(my_bool) * num_fields);
+    memset(nulls, 0, sizeof(my_bool) * num_fields);
 
     unsigned long *lengths = janet_smalloc(sizeof(unsigned long) * num_fields);
     memset(lengths, 0, sizeof(unsigned long) * num_fields);
 
-    bool *errors = janet_smalloc(sizeof(bool) * num_fields);
-    memset(errors, 0, sizeof(bool) * num_fields);
+    my_bool *errors = janet_smalloc(sizeof(my_bool) * num_fields);
+    memset(errors, 0, sizeof(my_bool) * num_fields);
 
     for (int i = 0; i < num_fields; ++i) {
         unsigned long len = 0;
@@ -474,14 +475,14 @@ static jmy_exec_bind_t create_exec_bind(int32_t argc, Janet *argv) {
         switch (janet_type(j)) {
             case JANET_NIL: {
                 binds[i].buffer_type = MYSQL_TYPE_NULL;
-                bool *v = (bool *)janet_smalloc(sizeof(bool));
-                *v = true;
+                my_bool *v = (my_bool *)janet_smalloc(sizeof(my_bool));
+                *v = 1;
                 binds[i].is_null = v;
                 break;
             }
             case JANET_BOOLEAN: {
                 binds[i].buffer_type = MYSQL_TYPE_TINY;
-                bool *v = (bool *)janet_smalloc(sizeof(bool));
+                my_bool *v = (my_bool *)janet_smalloc(sizeof(my_bool));
                 *v = janet_unwrap_boolean(j);
                 binds[i].buffer = v;
                 break;
@@ -599,7 +600,7 @@ static Janet stmt_select(jmy_statement_t *stmt, int32_t argc, Janet *argv) {
         janet_panicf("unexpected field_count is %d not zero", num_fields);
     }
 
-    bool truth = 1;
+    my_bool truth = 1;
     if (mysql_stmt_attr_set(statement, STMT_ATTR_UPDATE_MAX_LENGTH, &truth) != 0) {
         stmt_panic(statement, "mysql_stmt_attr_set");
     }
@@ -734,9 +735,9 @@ static Janet decode_text(char *v, unsigned long l, MYSQL_FIELD *field) {
             janet_struct_put(st, janet_ckeywordv("day"), janet_wrap_number(t.day));
             janet_struct_put(st, janet_ckeywordv("month"), janet_wrap_number(t.month));
             janet_struct_put(st, janet_ckeywordv("year"), janet_wrap_number(t.year));
-            if (field->type == MYSQL_TYPE_DATETIME) {
-                janet_struct_put(st, janet_ckeywordv("tz"), janet_wrap_number(t.time_zone_displacement));
-            }
+            // if (field->type == MYSQL_TYPE_DATETIME) {
+            //     janet_struct_put(st, janet_ckeywordv("tz"), janet_wrap_number(t.time_zone_displacement));
+            // }
             jv = janet_wrap_struct(janet_struct_end(st));
             break;
         }
@@ -863,9 +864,9 @@ static Janet decode_binary(MYSQL_BIND *bind, MYSQL_FIELD *field) {
                     janet_struct_put(st, janet_ckeywordv("day"), janet_wrap_number(t.day));
                     janet_struct_put(st, janet_ckeywordv("month"), janet_wrap_number(t.month));
                     janet_struct_put(st, janet_ckeywordv("year"), janet_wrap_number(t.year));
-                    if (field->type != MYSQL_TYPE_TIMESTAMP && field->type != MYSQL_TYPE_TIMESTAMP2) {
-                        janet_struct_put(st, janet_ckeywordv("tz"), janet_wrap_number(t.time_zone_displacement));
-                    }
+                    // if (field->type != MYSQL_TYPE_TIMESTAMP && field->type != MYSQL_TYPE_TIMESTAMP2) {
+                    //     janet_struct_put(st, janet_ckeywordv("tz"), janet_wrap_number(t.time_zone_displacement));
+                    // }
                     jv = janet_wrap_struct(janet_struct_end(st));
                     break;
                 }
@@ -882,7 +883,7 @@ static Janet decode_binary(MYSQL_BIND *bind, MYSQL_FIELD *field) {
 
                 case MYSQL_TIMESTAMP_NONE:
                 case MYSQL_TIMESTAMP_ERROR:
-                case MYSQL_TIMESTAMP_DATETIME_TZ:
+                //case MYSQL_TIMESTAMP_DATETIME_TZ:
                     janet_panicf("unexpected time type %d\n", t.time_type);
                     break;
             }
@@ -1233,7 +1234,7 @@ static Janet context_begin(int32_t argc, Janet *argv) {
     if (mysql_real_query(ctx->conn, start, strlen(start))) {
         janet_panicf("mysql_real_query failed %s\n", mysql_error(ctx->conn));
     }
-    ctx->in_transaction = true;
+    ctx->in_transaction = 1;
     return janet_wrap_nil();
 }
 
@@ -1245,7 +1246,7 @@ static Janet context_commit(int32_t argc, Janet *argv) {
     if (mysql_commit(ctx->conn)) {
         janet_panicf("mysql_commit failed %s\n", mysql_error(ctx->conn));
     }
-    ctx->in_transaction = false;
+    ctx->in_transaction = 0;
     return janet_wrap_nil();
 }
 
@@ -1257,7 +1258,7 @@ static Janet context_rollback(int32_t argc, Janet *argv) {
     if (mysql_rollback(ctx->conn)) {
         janet_panicf("mysql_rollback failed %s\n", mysql_error(ctx->conn));
     }
-    ctx->in_transaction = false;
+    ctx->in_transaction = 0;
     return janet_wrap_nil();
 }
 
@@ -1272,7 +1273,7 @@ static Janet context_autocommit(int32_t argc, Janet *argv) {
     janet_fixarity(argc, 2);
     jmy_context_t *ctx = (jmy_context_t *)janet_getabstract(argv, 0, &context_type);
     __ensure_ctx_ok(ctx);
-    bool ok = janet_getboolean(argv, 1);
+    my_bool ok = janet_getboolean(argv, 1);
     if (mysql_autocommit(ctx->conn, ok)) {
         janet_panicf("mysql_commit failed %s\n", mysql_error(ctx->conn));
     }
