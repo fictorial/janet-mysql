@@ -30,6 +30,15 @@ Transactions:
   (mysql/val conn "select ...."))
 ```
 
+# OS X support using Homebrew
+
+If you install mysql via Homebrew:
+
+```
+# Change for your version of mySQL
+export PKG_CONFIG_PATH=/usr/local/Cellar/mysql@5.7/5.7.35/lib/pkgconfig:$PKG_CONFIG_PATH
+```
+
 # Special thanks
 
 [Andrew Chambers](https://github.com/andrewchambers/janet-pq/) - The author of the postgres library from which this library was inspired.
